@@ -1,86 +1,84 @@
 from locust import HttpUser, task
 from requests.auth import HTTPBasicAuth
-from pathlib import Path
+import requests
 import random
 
-Path("output.txt").write_text("_________________________________________________\n")
+def write_log(message):
+    with open("output.txt", "a") as log_file:
+        log_file.write(message + "\n")
 
-class NextcloudUser(HttpUser):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.auth = None
-        self.users_list = random.sample(range(40), 40)
-        self.user = None
-        self.password = "test_password1234!"
+write_log("_________________________________________________")
+
+class UserSimulator(HttpUser):
+    login_auth = None
+    available_users = [f"user{n}" for n in range(40)]
 
     def on_start(self):
-        user_id = self.users_list.pop()
-        self.user = f"user{user_id}"
-        self.auth = HTTPBasicAuth(self.user, self.password)
-        self.verify_authentication()
+        self.current_user = random.choice(self.available_users)
+        self.available_users.remove(self.current_user)
+        password = 'test_password1234!'
+        self.login_auth = HTTPBasicAuth(self.current_user, password)
+        self.check_auth()
 
-    def verify_authentication(self):
-        response = self.client.head("/remote.php/dav", auth=self.auth)
-        if response.status_code != 200:
-            error_msg = f"Authentication failed for user {self.user}: {response.text}.\n"
-            Path("output.txt").write_text(error_msg, mode='a')
-            raise Exception(error_msg)
+    def check_auth(self):
+        resp = self.client.head("/remote.php/dav", auth=self.login_auth)
+        if resp.status_code != 200:
+            write_log(f"Auth failed for {self.current_user}: {resp.text}")
+            raise Exception(f"Auth failed for {self.current_user}")
 
     @task
-    def propfind(self):
+    def find_properties(self):
         try:
-            response = self.client.request("PROPFIND", "/remote.php/dav", auth=self.auth)
-            response.raise_for_status()
-        except Exception as e:
-            Path("output.txt").write_text(f"Error during PROPFIND request: {e} for user {self.user}.\n", mode='a')
-
+            self.client.request("PROPFIND", "/remote.php/dav", auth=self.login_auth).raise_for_status()
+        except Exception as error:
+            write_log(f"PROPFIND error: {error} for {self.current_user}")
+    """
     @task
-    def upload_small(self):
-        filename = Path("into-the-wild.png")
-        try:
-            with filename.open('rb') as f:
-                response = self.client.put(f"/remote.php/dav/files/{self.user}/{filename.name}",
-                                           auth=self.auth, data=f)
-            if response.status_code not in [201, 204]:
-                raise ValueError(f"Error during PUT request: {response.status_code}")
-            
-            self.client.delete(f"/remote.php/dav/files/{self.user}/{filename.name}",
-                               auth=self.auth)
-        except Exception as e:
-            Path("output.txt").write_text(f"Error: {e} for user {self.user}.\n", mode='a')
-
-    @task
-    def get_request(self):
-        self.client.get(f"/remote.php/dav/files/{self.user}/Readme.md",
-                                auth=self.auth)
-
-    @task
-    def upload_big(self):
-        filename = Path("big-file.png")
-        try:
-            with filename.open('rb') as f:
-                response = self.client.put(f"/remote.php/dav/files/{self.user}/{filename.name}",
-                                           auth=self.auth, data=f)
-            if response.status_code not in [201, 204]:
-                raise ValueError(f"Error during PUT request: {response.status_code}")
-            
-            self.client.delete(f"/remote.php/dav/files/{self.user}/{filename.name}",
-                               auth=self.auth)
-        except Exception as e:
-            Path("output.txt").write_text(f"Error: {e} for user {self.user}.\n", mode='a')
+    def small_upload(self):
+        pic = "into-the-wild.png"
+        with open(pic, 'rb') as image:
+            put_resp = self.client.put(f"/remote.php/dav/files/{self.current_user}/{pic}",
+                                       auth=self.login_auth, data=image, name=f"/remote.php/dav/files/[user]/{pic}")
         
+        if put_resp.status_code not in [201, 204]:
+            write_log(f"PUT error: {put_resp.status_code} for {self.current_user}")
+
+        self.perform_actions(pic)
+    """
+
     @task
-    def upload_medium(self):
-        filename = Path("medium-file.png")
-        try:
-            with filename.open('rb') as f:
-                response = self.client.put(f"/remote.php/dav/files/{self.user}/{filename.name}",
-                                           auth=self.auth, data=f)
-            if response.status_code not in [201, 204]:
-                raise ValueError(f"Error during PUT request: {response.status_code}")
-            
-            self.client.delete(f"/remote.php/dav/files/{self.user}/{filename.name}",
-                               auth=self.auth)
-        except Exception as e:
-            Path("output.txt").write_text(f"Error: {e} for user {self.user}.\n", mode='a')
+    def medium_upload(self):
+        pic = "medium-file.txt"
+        with open(pic, 'rb') as image:
+            put_resp = self.client.put(f"/remote.php/dav/files/{self.current_user}/{pic}",
+                                       auth=self.login_auth, data=image, name=f"/remote.php/dav/files/{self.current_user}/{pic}")
+
+                
+        if put_resp.status_code not in [201, 204]:
+            write_log(f"PUT error: {put_resp.status_code} for {self.current_user}")
+
+        self.perform_actions(pic)
+
+    """
+    @task
+    def big_upload(self):
+        pic = "big-file.txt"
+        with open(pic, 'rb') as image:
+            put_resp = self.client.put(f"/remote.php/dav/files/{self.current_user}/{pic}",
+                                       auth=self.login_auth, data=image, name=f"/remote.php/dav/files/[user]/{pic}")
+
+    
         
+        if put_resp.status_code not in [201, 204]:
+            write_log(f"PUT error: {put_resp.status_code} for {self.current_user}")
+
+        self.perform_actions(pic)
+        
+    """
+
+    def perform_actions(self, pic):
+        for _ in range(5):
+            self.client.get(f"/remote.php/dav/files/{self.current_user}/{pic}",
+                            auth=self.login_auth, name=f"/remote.php/dav/files/{self.current_user}/{pic}")
+        self.client.delete(f"/remote.php/dav/files/{self.current_user}/{pic}",
+                           auth=self.login_auth, name=f"/remote.php/dav/files/{user}/{pic}")
