@@ -9,4 +9,7 @@ docker-compose up -d
 ```bash
 sh UserCreate.sh
 ```
-4. Perform tests on Locust going to http://localhost:8080 
+4. Perform tests on Locust going to http://localhost:8080, but first 
+```bash
+locust -f locustfile.py
+```
