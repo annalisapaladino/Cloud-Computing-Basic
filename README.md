@@ -1,7 +1,7 @@
 # Cloud-Computing-Basic
 
 1. Install Docker and Docker-Compose
-2. Start the containers with
+2. Start the containers
 ```bash
 docker-compose up -d
 ```
